@@ -1,7 +1,7 @@
 # StateService
 
-StateService is a state-machine-as-a-service and solves the problem of
-coordinating tasks that must occur in a sequence on one or more
+StateService is a state-machine-as-a-service that solves the problem of
+coordinating events that must occur in a sequence on one or more
 machines.
 
 ## Examples
@@ -38,7 +38,7 @@ states:
 Run a local instance of StateService.
 
 ```sh
-> ./state_service --chart states.yaml &> /dev/null &
+> ./state_service --machine states.yaml &> /dev/null &
 ```
 
 Use cURL to query and update the state machine defined by `states.yaml`.
@@ -148,8 +148,30 @@ defined fully with its name, a `func` attribute (`increment`), its
 current attributes (a key/value pair that describes a `count` key with a
 value of 0), and a target state to which it transitions when
 `green_state`'s `count` becomes 1. The `func` key describes a method on
-the `State` class (see `state.py`); in the case of `increment`, the
-method increments the current state's `key` by 1.
+the `State` class (see `state.py`).
+
+Two `func` methods are defined: `increment` and `time`. In the case of
+`increment`, the method increments the current state's `key` by 1;
+`time` provides the state machine with the ability to transition states
+depending on a specific time, for example:
+
+```yaml
+...
+states:
+  - name: green_state
+    func: time
+    target:
+      name: red_state
+      when:
+        key: clock
+        value: '2020-01-01T12:00:00'
+...
+```
+
+describes `green_state` that will transition to `red_state` after midday
+on January 1, 2020. A `current` key is not necessary when the `time`
+function is used (it is implied that the current `clock` value is the
+current time on the machine that's running StateService).
 
 Other states are defined similarly, however, the final state is
 described only by its name (more precisely, it's identified by the
@@ -164,7 +186,6 @@ current state as one or more machines query and update its state machine.
 After each update (PUT request), StateService persists its state, so
 failures in the service do not result in inconsistent state (by default,
 file storage is used).
-
 
 StateService uses HTTP to integrate with software automation tools like
 Chef to coordinate state across several machines. For example, if one
@@ -187,6 +208,21 @@ command; otherwise, this resource will not execute. After executing the
 command, `didChangeMachine.curl` is used to update StateService using a
 PUT request, e.g.,
 `https://state_service/state?state=canChangeMachineState`.
+
+When the `func` value is `time`, the Chef resource is defined as:
+
+```rb
+change_command = './change.sh'
+execute 'change_machine' do
+  cwd home_dir
+  command change_command
+  only_if 'curl -K canChangeMachine.curl', :cwd => home_dir
+end
+```
+
+where `canChangeMachine.curl` describes a PUT request to StateService.
+This is consistent with the intention that at a certain time, we want to
+cause a state to transition, i.e., to update its state.
 
 ## Contributing
 

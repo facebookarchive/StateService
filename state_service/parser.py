@@ -52,11 +52,10 @@ class Parser(object):
             self._parser = argparse.ArgumentParser(prog='state_service',
                                                    fromfile_prefix_chars='@',
                                                    )
-            self._parser.add_argument('--chart',
+            self._parser.add_argument('--machine',
                                       type=str,
-                                      required=False,
-                                      default='/tmp/chart.yaml',
-                                      help='the state chart for the tier',
+                                      required=True,
+                                      help='the state machine for the tier',
                                       )
             self._parser.add_argument('--debug',
                                       action='store_true',

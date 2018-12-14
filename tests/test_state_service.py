@@ -11,14 +11,22 @@
 from unittest import mock
 from unittest import TestCase
 
-from .test_fixtures import chart_fixture
+from datetime import datetime
+
+from .test_fixtures import argparse_fixture
+from .test_fixtures import state_machine_fixture
+from .test_fixtures import time_machine_fixture
 from ..state_service.state_service import app
 
 
 class TestStateService(TestCase):
 
-    module = 'state_service.state_service.state_chart.StateChart'
-    patched_chart_func = f'{module}._read_chart'
+    machine_module = 'state_service.state_service.state_machine.StateMachine'
+    parser_module = 'argparse.ArgumentParser'
+    state_module = 'state_service.state_service.state.State'
+    patched_machine_func = f'{machine_module}._read_machine'
+    patched_parser_func = f'{parser_module}.parse_known_args'
+    patched_now_func = f'{state_module}._now'
 
     def setUp(self):
         app.testing = True
@@ -27,8 +35,9 @@ class TestStateService(TestCase):
     def tearDown(self):
         self.app = None
 
-    @mock.patch(patched_chart_func, return_value=chart_fixture())
-    def test_get_state_tests_current_state(self, *patch):
+    @mock.patch(patched_machine_func, return_value=state_machine_fixture())
+    @mock.patch(patched_parser_func, return_value=argparse_fixture())
+    def test_get_normal_state_tests_current_state(self, *patch):
         expected = 200
         actual = self.app.get('/state?state=state_1')
 
@@ -37,8 +46,9 @@ class TestStateService(TestCase):
         expected = b'state_1'
         self.assertEqual(expected, actual.data)
 
-    @mock.patch(patched_chart_func, return_value=chart_fixture())
-    def test_put_state_updates_current_state(self, *patch):
+    @mock.patch(patched_machine_func, return_value=state_machine_fixture())
+    @mock.patch(patched_parser_func, return_value=argparse_fixture())
+    def test_put_normal_state_updates_current_state(self, *patch):
         self.app.put('/state?state=state_1')
 
         expected = 200
@@ -64,3 +74,28 @@ class TestStateService(TestCase):
 
         expected = b'state_2'
         self.assertEqual(expected, actual.data)
+
+    @mock.patch(patched_machine_func, return_value=time_machine_fixture())
+    @mock.patch(patched_now_func, return_value=datetime(3000, 1, 1, 3, 0))
+    @mock.patch(patched_parser_func, return_value=argparse_fixture())
+    def test_get_time_state_tests_current_state(self, *patch):
+        expected = 200
+        actual = self.app.get('/state?state=state_1')
+
+        self.assertEqual(expected, actual.status_code)
+
+        expected = b'state_1'
+        self.assertEqual(expected, actual.data)
+
+    @mock.patch(patched_machine_func, return_value=time_machine_fixture())
+    @mock.patch(patched_now_func, return_value=datetime(3000, 1, 1, 3, 0))
+    @mock.patch(patched_parser_func, return_value=argparse_fixture())
+    def test_put_time_state_updates_current_state(self, *patch):
+        expected = 200
+        actual = self.app.get('/state?state=state_2')
+
+        self.assertEqual(expected, actual.status_code)
+        expected = 200
+        actual = self.app.put('/state?state=state_2')
+
+        self.assertEqual(expected, actual.status_code)

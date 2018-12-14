@@ -8,6 +8,8 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+from collections import defaultdict
+
 import os
 import yaml
 
@@ -15,18 +17,22 @@ from .state import State
 from .state_delegate import StateDelegate
 
 
-class StateChart(StateDelegate):
+def dict_constructor(loader, node):
+        return defaultdict(str, loader.construct_pairs(node))
+
+
+class StateMachine(StateDelegate):
     """
     Describes the states available, as well as identifying the current
     state.
 
-    StateChart acts as a delegate for State objects, so that the current
-    state can be updated and the current state chart can be persisted after
-    eadch update.
+    StateMachine acts as a delegate for State objects, so that the current
+    state can be updated and the current state machine can be persisted after
+    each update.
     """
 
     def __init__(self, path):
-        self._chart = None
+        self._machine = None
         self._current_state = None
         self._current_state_name = ''
         self._path = path
@@ -50,11 +56,11 @@ class StateChart(StateDelegate):
             yaml.dump(data, f, default_flow_style=False)
 
     @property
-    def chart(self):
-        if self._chart is None:
-            self._chart = self._read_chart()
+    def machine(self):
+        if self._machine is None:
+            self._machine = self._read_machine()
 
-        return self._chart
+        return self._machine
 
     @property
     def current_state(self):
@@ -68,8 +74,8 @@ class StateChart(StateDelegate):
     def states(self):
         if self._states is None:
             self._states = {}
-            self._current_state_name = self.chart['current_state']
-            self._define(self.chart['states'])
+            self._current_state_name = self.machine['current_state']
+            self._define(self.machine['states'])
 
         return self._states
 
@@ -80,18 +86,19 @@ class StateChart(StateDelegate):
             state_name = state.name
             self._states[state_name] = state
 
-    def _read_chart(self):
+    def _read_machine(self):
         """
-        Reads the state chart from a YAML file.
+        Reads the state machine from a YAML file.
 
         Returns:
-            - State chart (dict) if read from file
-            - State chart (dict) that is only an end state, if path or file
+            - State machine (dict) if read from file
+            - State machine (dict) that is only an end state, if path or file
             is missing
 
         Raises:
             - RuntimeError if YAML if not properly formatted
         """
+
         if self.path is None:
             return {
                 'name': 'no_state',
@@ -100,11 +107,11 @@ class StateChart(StateDelegate):
         if os.path.exists(self.path):
             with open(self.path, 'rt') as data:
                 try:
-                    chart = yaml.load(data)
+                    machine = yaml.load(data)
                 except yaml.YAMLError:
                     raise RuntimeError(f'{self.path} is not a YAML file')
 
-            return chart
+            return machine
         else:
             return {
                 'name': 'no_state',

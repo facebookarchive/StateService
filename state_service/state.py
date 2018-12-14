@@ -8,6 +8,8 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+from datetime import datetime
+
 
 class State:
     """
@@ -21,19 +23,29 @@ class State:
 
     States transition by applying a function to the current state and checking
     if the current state equals the target state. The function is provided
-    in the definition of the state; presently, the only function that is
-    supported is 'increment.'
+    in the definition of the state. The function can be `increment`, which
+    increments a value, or `time`, which schedules when a state transition
+    will occur.
 
     A state that does not provide a function is determined to be the last or
     end state.
     """
 
+    DATE_FORMAT = '%Y-%m-%dT%H:%M:%S'
+
+    INCREMENT_FUNC = 'increment'
+    TIME_FUNC = 'time'
+
+
     def __init__(self, definition):
         self._name = None
         self._function = None
         self._target_name = ''
-        self._current_state = None
-        self._target_state = None
+        self._current_state = {
+            'key': '',
+            'value': '',
+        }
+        self._target_state = {}
         self._delegate = None
         self._did_enter_state = False
         self._is_end_state = False
@@ -46,6 +58,7 @@ class State:
                 'name': self.name,
             }
 
+        target_value = self._target_value()
         return {
             'name': self.name,
             'func': self.function,
@@ -57,7 +70,7 @@ class State:
                 'name': self.target_name,
                 'when': {
                     'key': self.target_state['key'],
-                    'value': self.target_state['value'],
+                    'value': target_value,
                 },
             },
         }
@@ -71,12 +84,12 @@ class State:
 
     def update(self):
         func = getattr(self, self.function)
-        try:
-            func()
-        except Exception:
+        func()
+        self.delegate.save()
+
+    def time(self):
+        if not self.transition():
             raise RuntimeError(f'Failed to update {self.name} state')
-        else:
-            self.delegate.save()
 
     def increment(self):
         self.current_state['value'] += 1
@@ -120,16 +133,27 @@ class State:
 
     def _can_transition(self):
         """
-        Returns if the value associated with the current state equals the
-        value associated with the target state.
+        For increment functions:
+
+            Returns if the value associated with the current state equals the
+            value associated with the target state.
+
+        For time functions:
+
+            Returns if the value associated with the current state is before
+            the value associated with the target state.
         """
-        if self.current_state is None:
-            return False
 
-        current_value = self.current_state['value']
-        target_value = self.target_state['value']
+        if self.function == State.TIME_FUNC:
+            now = self._now()
+            target = self.target_state['value']
+            return target < now
+        elif self.function == State.INCREMENT_FUNC:
+            current_value = self.current_state['value']
+            target_value = self.target_state['value']
+            return current_value == target_value
 
-        return current_value == target_value
+        return False
 
     def _define(self, definition):
         self._name = definition['name']
@@ -142,16 +166,13 @@ class State:
         try:
             current = definition['current']
         except KeyError as e:
-            raise e
+            # current is defined as a default
+            pass
         else:
             self._define_now(current)
 
-        try:
-            target = definition['target']
-        except KeyError as e:
-            raise e
-        else:
-            self._define_target(target)
+        target = definition['target']
+        self._define_target(target)
 
     def _define_now(self, value):
         self._current_state = value
@@ -159,8 +180,22 @@ class State:
     def _define_target(self, value):
         self._target_name = value['name']
         self._target_state = value['when']
+        if self.function == State.TIME_FUNC:
+            self._target_state['value'] = datetime.strptime(
+                value['when']['value'], State.DATE_FORMAT
+            )
 
     def _enter_state(self):
         new_state_name = self.target_name
         self._did_enter_state = self.delegate.did_enter_state(
             self, new_state_name)
+
+    def _now(self):
+        return datetime.now()
+
+    def _target_value(self):
+        value = self.target_state['value']
+        if self.function == State.TIME_FUNC:
+            return value.strftime(State.DATE_FORMAT)
+
+        return value

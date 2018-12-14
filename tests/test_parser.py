@@ -23,7 +23,7 @@ class TestParser(TestCase):
 
     def test_parser(self):
         options = self.parser.parser.parse_args(
-            ['--chart', 'states.yaml',
+            ['--machine', 'states.yaml',
              '--debug',
              '--host', 'www.facebook.com',
              '--port', '22111',
@@ -31,7 +31,7 @@ class TestParser(TestCase):
         )
 
         expected = 'states.yaml'
-        actual = options.chart
+        actual = options.machine
         self.assertEqual(expected, actual)
 
         actual = options.debug

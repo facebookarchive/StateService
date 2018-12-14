@@ -8,8 +8,19 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import argparse
 
-def chart_fixture():
+
+def argparse_fixture():
+    return (
+        argparse.Namespace(
+            machine='machine.yaml',
+        ),
+        []
+    )
+
+
+def state_machine_fixture():
     return {
         'current_state': 'state_1',
         'states': [{
@@ -46,7 +57,36 @@ def chart_fixture():
     }
 
 
-def state_fixture():
+def time_machine_fixture():
+    return {
+        'current_state': 'state_1',
+        'states': [{
+            'name': 'state_1',
+            'func': 'time',
+            'target': {
+                'name': 'state_2',
+                'when': {
+                    'key': 'clock',
+                    'value': '3000-01-01T02:00:00',
+                },
+            },
+        }, {
+            'name': 'state_2',
+            'func': 'time',
+            'target': {
+                'name': 'state_3',
+                'when': {
+                    'key': 'clock',
+                    'value': '3000-01-01T02:00:10',
+                },
+            },
+        }, {
+            'name': 'state_3',
+        }],
+    }
+
+
+def simple_state_fixture():
     return {
         'name': 'state_1',
         'func': 'increment',
@@ -59,6 +99,20 @@ def state_fixture():
             'when': {
                 'key': 'count',
                 'value': 2,
+            },
+        },
+    }
+
+
+def time_state_fixture():
+    return {
+        'name': 'state_1',
+        'func': 'time',
+        'target': {
+            'name': 'state_2',
+            'when': {
+                'key': 'clock',
+                'value': '3000-01-01T02:00:10',
             },
         },
     }

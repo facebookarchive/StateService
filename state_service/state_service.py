@@ -15,7 +15,7 @@ from flask import Response
 
 from .logger import configure_logger
 from .parser import Parser
-from .state_chart import StateChart
+from .state_machine import StateMachine
 
 
 class StateService(object):
@@ -23,7 +23,7 @@ class StateService(object):
     Configures a Flask application using command-line arguments and includes
     response methods for each endpoint.
 
-    Each method acts on a state chart that is used to describe states, for
+    Each method acts on a state machine that is used to describe states, for
     example, when one state transitions to another state.
 
     GET /state?state=:state determines if a state, :state, is the current
@@ -33,7 +33,7 @@ class StateService(object):
     """
 
     def __init__(self, parser):
-        self._chart = None
+        self._machine = None
         self._logger = None
         self._options = None
         self._parser = parser
@@ -53,7 +53,7 @@ class StateService(object):
             self.logger.error('GET /state: Missing :state query parameter')
             return Response('', status=406)
 
-        if self.chart.current_state.name == state:
+        if self.machine.current_state.name == state:
             self.logger.info(f'GET /state: {state} is current state')
             return Response(f'{state}', status=200)
 
@@ -76,12 +76,12 @@ class StateService(object):
             self.logger.error('PUT /state: Missing :state query parameter')
             return Response('', status=500)
 
-        if self.chart.current_state.name == state:
-            if self.chart.current_state.is_end_state:
+        if self.machine.current_state.name == state:
+            if self.machine.current_state.is_end_state:
                 self.logger.info(f'PUT /state: {state} is final state')
                 return Response('', status=406)
             try:
-                self.chart.current_state.update()
+                self.machine.current_state.update()
             except RuntimeError as e:
                 self.logger.error(f'PUT /state: Unable to update {state} state')
                 return Response('', status=500)
@@ -93,11 +93,11 @@ class StateService(object):
         return Response('', status=406)
 
     @property
-    def chart(self):
-        if self._chart is None:
-            self._chart = StateChart(self.options.chart)
+    def machine(self):
+        if self._machine is None:
+            self._machine = StateMachine(self.options.machine)
 
-        return self._chart
+        return self._machine
 
     @property
     def logger(self):
