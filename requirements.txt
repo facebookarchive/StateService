@@ -21,7 +21,7 @@ python-swiftclient==3.5.0
 PyYAML==3.13
 requests==2.20.0
 six==1.11.0
-urllib3==1.22
+urllib3==1.23
 Werkzeug==0.14.1
 wrapt==1.10.11
 xar==18.7.12
