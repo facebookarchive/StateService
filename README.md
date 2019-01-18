@@ -62,6 +62,11 @@ Use cURL to query and update the state machine defined by `states.yaml`.
 # Output is 200 OK
 ```
 
+StateService provides two ways to update its state machine. The first is
+as above: external HTTP requests cause updates. The second uses a state
+machine that contains states whose transitions are described using time;
+in this case, StateService updates its state machine automatically.
+
 ## Requirements
 
 StateService requires:
@@ -115,7 +120,12 @@ current state or wants to update the current state.
 ### Describing States
 
 StateService reads a list of states from a YAML file and identifies an
-initial state for a machine (or machines). An example of a list of states is:
+initial state for a machine (or machines). The state machine can be
+synchronous or asynchronous.
+
+#### Synchronous State Machines
+
+An example of a synchronous state machine is:
 
 ```yaml
 current_state: green_state
@@ -150,10 +160,10 @@ value of 0), and a target state to which it transitions when
 `green_state`'s `count` becomes 1. The `func` key describes a method on
 the `State` class (see `state.py`).
 
-Two `func` methods are defined: `increment` and `time`. In the case of
-`increment`, the method increments the current state's `key` by 1;
-`time` provides the state machine with the ability to transition states
-depending on a specific time, for example:
+#### Asynchronous State Machines
+
+To program an asynchronous state machine, describe a state machine as
+above, but assign the `func` key with a `time` value:
 
 ```yaml
 ...
@@ -164,18 +174,24 @@ states:
       name: red_state
       when:
         key: clock
-        value: '2020-01-01T12:00:00'
+        value: '3000-01-01T12:00:00'
 ...
 ```
 
 describes `green_state` that will transition to `red_state` after midday
-on January 1, 2020. A `current` key is not necessary when the `time`
+on January 1, 3000. A `current` key is not necessary when the `time`
 function is used (it is implied that the current `clock` value is the
 current time on the machine that's running StateService).
 
-Other states are defined similarly, however, the final state is
-described only by its name (more precisely, it's identified by the
-absence of a `func` attribute).
+---
+
+Two `func` methods are defined: `increment` and `time`. In the case of
+`increment`, the method increments the current state's `key` by 1;
+`time` provides the state machine with the ability to transition states
+automatically depending on a specific time.
+
+The final state of a state machine is described only by its name (more
+precisely, it's identified by the absence of a `func` attribute).
 
 ### StateService
 
@@ -183,9 +199,9 @@ StateService provides a state-machine-as-a-service. StateService reads a
 linear state machine (described using YAML, as above) and records the
 current state as one or more machines query and update its state machine.
 
-After each update (PUT request), StateService persists its state, so
-failures in the service do not result in inconsistent state (by default,
-file storage is used).
+After each update, StateService persists its state, so failures in the
+service do not result in inconsistent state (by default, file storage is
+used).
 
 StateService uses HTTP to integrate with software automation tools like
 Chef to coordinate state across several machines. For example, if one
@@ -193,6 +209,7 @@ machine requires its group to be in a certain state before performing an
 action, it can query StateService from a Chef resource:
 
 ```rb
+# Assuming a synchronous state machine
 change_command = './change.sh'
 execute 'change_machine' do
   cwd home_dir
@@ -212,6 +229,7 @@ PUT request, e.g.,
 When the `func` value is `time`, the Chef resource is defined as:
 
 ```rb
+# Assuming an asynchronous state machine
 change_command = './change.sh'
 execute 'change_machine' do
   cwd home_dir
@@ -220,9 +238,9 @@ execute 'change_machine' do
 end
 ```
 
-where `canChangeMachine.curl` describes a PUT request to StateService.
-This is consistent with the intention that at a certain time, we want to
-cause a state to transition, i.e., to update its state.
+where `canChangeMachine.curl` describes a GET request to StateService.
+This is consistent with the intention that, when state transitions are
+scheduled at a certain time, we only need to request the current state.
 
 ## Contributing
 

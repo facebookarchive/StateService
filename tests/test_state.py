@@ -13,8 +13,8 @@ from unittest import TestCase
 
 from datetime import datetime
 
-from .test_fixtures import simple_state_fixture
-from .test_fixtures import time_state_fixture
+from .test_fixtures import normal_state_fixture
+from .test_fixtures import async_state_fixture
 from ..state_service.state import State
 from ..state_service.state_delegate import StateDelegate
 
@@ -24,12 +24,10 @@ class StateDelegateMock(StateDelegate):
     def did_enter_state(self, old_state, new_state):
         return True
 
-    def save(self):
-        pass
-
 
 class TestState(TestCase):
 
+    delegate_module = 'state_service.tests.test_state.StateDelegateMock'
     state_module = 'state_service.state_service.state.State'
     patched_now_func = f'{state_module}._now'
 
@@ -39,16 +37,19 @@ class TestState(TestCase):
     def tearDown(self):
         self.state = None
 
-    def set_up_simple_state_fixture(self):
-        self.state = State(simple_state_fixture())
+    def set_up_normal_state_fixture(self):
+        self.state = State(normal_state_fixture())
         self.state.delegate = StateDelegateMock()
 
-    def set_up_time_state_fixture(self):
-        self.state = State(time_state_fixture())
+    def set_up_async_state_fixture(self):
+        self.state = State(async_state_fixture())
         self.state.delegate = StateDelegateMock()
 
-    def test_simple_state_initializes_correctly(self):
-        self.set_up_simple_state_fixture()
+    #
+    # Testing normal states
+    #
+    def test_normal_state_initializes_correctly(self):
+        self.set_up_normal_state_fixture()
 
         expected = 'state_1'
         actual = self.state.name
@@ -56,7 +57,7 @@ class TestState(TestCase):
         self.assertEqual(expected, actual)
 
         expected = 'increment'
-        actual = self.state.function
+        actual = self.state.action
 
         self.assertEqual(expected, actual)
 
@@ -64,12 +65,12 @@ class TestState(TestCase):
             'key': 'count',
             'value': 0,
         }
-        actual = self.state.current_state
+        actual = self.state.current
 
         self.assertEqual(expected, actual)
 
         expected = 'state_2'
-        actual = self.state.target_name
+        actual = self.state.target.name
 
         self.assertEqual(expected, actual)
 
@@ -77,31 +78,39 @@ class TestState(TestCase):
             'key': 'count',
             'value': 2,
         }
-        actual = self.state.target_state
+        actual = self.state.target.when
 
         self.assertEqual(expected, actual)
 
-    def test_did_enter_state_is_initially_false(self):
-        self.set_up_simple_state_fixture()
+    def test_normal_did_enter_state_is_initially_false(self):
+        self.set_up_normal_state_fixture()
 
         actual = self.state.did_enter_state
         self.assertFalse(actual)
 
-    def test_can_transition_is_false_when_simple_state_cannot_transition(self):
-        self.set_up_simple_state_fixture()
+    def test_to_dict_records_a_normal_state_as_a_dict(self):
+        self.set_up_normal_state_fixture()
+
+        actual = self.state.to_dict()
+        expected = normal_state_fixture()
+
+        self.assertEqual(expected, actual)
+
+    def test_can_transition_is_false_when_normal_state_cannot_transition(self):
+        self.set_up_normal_state_fixture()
 
         actual = self.state._can_transition()
         self.assertFalse(actual)
 
-    def test_can_transition_is_true_when_simple_state_can_transition(self):
-        self.set_up_simple_state_fixture()
+    def test_can_transition_is_true_when_normal_state_can_transition(self):
+        self.set_up_normal_state_fixture()
 
-        self.state.current_state['value'] = self.state.target_state['value']
+        self.state.current.value = self.state.target.when.value
         actual = self.state._can_transition()
         self.assertTrue(actual)
 
-    def test_transition_returns_false_if_simple_state_cannot_transition(self):
-        self.set_up_simple_state_fixture()
+    def test_transition_returns_false_if_normal_state_cannot_transition(self):
+        self.set_up_normal_state_fixture()
 
         actual = self.state.transition()
         self.assertFalse(actual)
@@ -109,18 +118,18 @@ class TestState(TestCase):
         actual = self.state.did_enter_state
         self.assertFalse(actual)
 
-    def test_transition_returns_true_if_simple_state_can_transition(self):
-        self.set_up_simple_state_fixture()
+    def test_transition_returns_true_if_normal_state_can_transition(self):
+        self.set_up_normal_state_fixture()
 
-        self.state.current_state['value'] = self.state.target_state['value']
+        self.state.current.value = self.state.target.when.value
         actual = self.state.transition()
         self.assertTrue(actual)
 
         actual = self.state.did_enter_state
         self.assertTrue(actual)
 
-    def test_update_transitions_to_new_simple_state_correctly(self):
-        self.set_up_simple_state_fixture()
+    def test_update_transitions_to_new_normal_state_correctly(self):
+        self.set_up_normal_state_fixture()
 
         actual = self.state.did_enter_state
         self.assertFalse(actual)
@@ -133,8 +142,11 @@ class TestState(TestCase):
         actual = self.state.did_enter_state
         self.assertTrue(actual)
 
-    def test_time_state_initializes_correctly(self):
-        self.set_up_time_state_fixture()
+    #
+    # Testing async states
+    #
+    def test_async_state_initializes_correctly(self):
+        self.set_up_async_state_fixture()
 
         expected = 'state_1'
         actual = self.state.name
@@ -142,48 +154,67 @@ class TestState(TestCase):
         self.assertEqual(expected, actual)
 
         expected = 'time'
-        actual = self.state.function
+        actual = self.state.action
 
         self.assertEqual(expected, actual)
 
-        expected = {
-            'key': '',
-            'value': '',
-        }
-        actual = self.state.current_state
+        actual = self.state.is_async
+        self.assertTrue(actual)
 
-        self.assertEqual(expected, actual)
+        with self.assertRaises(KeyError):
+            self.state.current
+
 
         expected = 'state_2'
-        actual = self.state.target_name
+        actual = self.state.target.name
 
         self.assertEqual(expected, actual)
 
         expected = {
             'key': 'clock',
-            'value': datetime(3000, 1, 1, 2, 0, 10),
+            'value': '3000-01-01T02:00:10',
         }
-        actual = self.state.target_state
+        actual = self.state.target.when
+
+        self.assertEqual(expected, actual)
+
+    def test_async_did_enter_state_is_initially_false(self):
+        self.set_up_async_state_fixture()
+
+        actual = self.state.did_enter_state
+        self.assertFalse(actual)
+
+    def test_to_dict_records_an_async_state_as_a_dict(self):
+        self.set_up_async_state_fixture()
+
+        actual = self.state.to_dict()
+        expected = async_state_fixture()
 
         self.assertEqual(expected, actual)
 
     @mock.patch(patched_now_func, return_value=datetime(3000, 1, 1, 1, 0))
-    def test_can_transition_is_false_when_time_state_cannot_transition(self, *patch):
-        self.set_up_time_state_fixture()
+    def test_can_transition_is_false_when_async_state_cannot_transition(
+        self, *patch
+    ):
+        self.set_up_async_state_fixture()
 
         actual = self.state._can_transition()
         self.assertFalse(actual)
 
     @mock.patch(patched_now_func, return_value=datetime(3000, 1, 1, 3, 0))
-    def test_can_transition_is_true_when_time_state_can_transition(self, *patch):
-        self.set_up_time_state_fixture()
+    def test_can_transition_is_true_when_async_state_can_transition(
+        self, *patch
+    ):
+        self.set_up_async_state_fixture()
 
         actual = self.state._can_transition()
         self.assertTrue(actual)
 
     @mock.patch(patched_now_func, return_value=datetime(3000, 1, 1, 1, 0))
-    def test_transition_returns_false_if_time_state_cannot_transition(self, *patch):
-        self.set_up_time_state_fixture()
+    def test_transition_returns_false_if_async_state_cannot_transition(
+        self, *patch
+    ):
+        self.set_up_async_state_fixture()
 
         actual = self.state.transition()
         self.assertFalse(actual)
@@ -192,8 +223,8 @@ class TestState(TestCase):
         self.assertFalse(actual)
 
     @mock.patch(patched_now_func, return_value=datetime(3000, 1, 1, 3, 0))
-    def test_transition_returns_true_if_time_state_can_transition(self, *patch):
-        self.set_up_time_state_fixture()
+    def test_transition_returns_true_if_async_state_can_transition(self, *patch):
+        self.set_up_async_state_fixture()
 
         actual = self.state.transition()
         self.assertTrue(actual)
@@ -201,15 +232,9 @@ class TestState(TestCase):
         actual = self.state.did_enter_state
         self.assertTrue(actual)
 
-    @mock.patch(patched_now_func, return_value=datetime(3000, 1, 1, 1, 0))
-    def test_transition_raises_error_if_time_state_is_early(self, *patch):
-        self.set_up_time_state_fixture()
-
-        self.assertRaises(RuntimeError, self.state.time)
-
     @mock.patch(patched_now_func, return_value=datetime(3000, 1, 1, 3, 0))
-    def test_update_transitions_to_new_time_state_correctly(self, *patch):
-        self.set_up_time_state_fixture()
+    def test_update_transitions_to_new_async_state_correctly(self, *patch):
+        self.set_up_async_state_fixture()
 
         actual = self.state.did_enter_state
         self.assertFalse(actual)

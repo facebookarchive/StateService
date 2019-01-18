@@ -9,6 +9,7 @@
 #
 
 import logging
+import sys
 from flask import Flask
 from flask import request
 from flask import Response
@@ -28,32 +29,33 @@ class StateService(object):
 
     GET /state?state=:state determines if a state, :state, is the current
     state.
-    PUT /state?state=:state updates the state, :state and determines if it
+    PUT /state?state=:state updates the state, :state, and determines if it
     should transition to another state.
     """
 
     def __init__(self, parser):
-        self._machine = None
         self._logger = None
+        self._machine = None
         self._options = None
         self._parser = parser
 
     def get_state(self):
         """
-        Returns 204 or 406 depending on whether the current state matches
-        the state passed in as a query parameter.
+        Determines whether the current state matches the state passed in as a
+        query parameter.
 
         Returns:
             A 200 HTTP response if :state is the current state,
-            A 406 HTTP response otherwise
+            A 406 HTTP response if :state is not the current state
+            A 500 HTTP response if :state is missing
         """
         state = request.args.get('state')
 
         if state is None:
             self.logger.error('GET /state: Missing :state query parameter')
-            return Response('', status=406)
+            return Response('', status=500)
 
-        if self.machine.current_state.name == state:
+        if self.machine.is_current_state(state):
             self.logger.info(f'GET /state: {state} is current state')
             return Response(f'{state}', status=200)
 
@@ -65,10 +67,15 @@ class StateService(object):
         Updates the current state and determines if the state should
         transition to a new state.
 
+        Asynchronous (scheduled) states are updated based on an internal
+        clock, so the response to a PUT request when the state machine is
+        asynchronous will be 500.
+
         Returns:
             A 200 HTTP response if :state was updated,
             A 406 HTTP response if :state was not updated, or,
-            A 500 HTTP response if :state could not be updated
+            A 500 HTTP response if :state is missing or could not be
+                updated
         """
         state = request.args.get('state')
 
@@ -76,28 +83,29 @@ class StateService(object):
             self.logger.error('PUT /state: Missing :state query parameter')
             return Response('', status=500)
 
-        if self.machine.current_state.name == state:
-            if self.machine.current_state.is_end_state:
-                self.logger.info(f'PUT /state: {state} is final state')
-                return Response('', status=406)
-            try:
-                self.machine.current_state.update()
-            except RuntimeError as e:
-                self.logger.error(f'PUT /state: Unable to update {state} state')
-                return Response('', status=500)
-            else:
+        if self.machine.did_end:
+            self.logger.info(
+                'PUT /state: {state}; the state machine is in its final state'
+            )
+            return Response('', status=500)
+
+        if self.machine.is_async:
+            self.logger.info(
+                'PUT /state: {state}; an async state machine updates itself'
+            )
+            return Response('', status=500)
+
+        if self.machine.is_current_state(state):
+            if self.machine.update():
+                self.machine.save()
                 self.logger.info(f'PUT /state: Updated {state} state')
                 return Response(f'{state}', status=200)
+            else:
+                self.logger.error(f'PUT /state: Unable to update {state} state')
+                return Response('', status=500)
 
         self.logger.info(f'PUT /state: {state} is not current state')
         return Response('', status=406)
-
-    @property
-    def machine(self):
-        if self._machine is None:
-            self._machine = StateMachine(self.options.machine)
-
-        return self._machine
 
     @property
     def logger(self):
@@ -105,6 +113,14 @@ class StateService(object):
             self._logger = logging.getLogger(__name__)
 
         return self._logger
+
+    @property
+    def machine(self):
+        if self._machine is None:
+            self._machine = StateMachine(self.options.machine)
+            self._machine.build()
+
+        return self._machine
 
     @property
     def options(self):
@@ -141,11 +157,20 @@ def update_state():
     return state_service.update_state()
 
 
-if __name__ == '__main__':
+def main():
     options = state_service.options
     debug = options.debug
     host = options.host
     logger_path = options.logger
     port = options.port
     configure_logger(path=logger_path)
-    app.run(debug=debug, host=host, port=port)
+
+    try:
+        app.run(debug=debug, host=host, port=port)
+    except Exception:
+        app.machine.save()
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

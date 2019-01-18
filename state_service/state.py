@@ -8,74 +8,147 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import threading
+
 from datetime import datetime
+from enum import Enum
 
 
-class State:
+class Action(Enum):
+    INCREMENT = 'increment'
+    TIME = 'time'
+
+
+class StateData(dict):
+    """
+    Represents a nested `dict` in a State.
+
+    This is used to avoid using `State` to describe nested
+    `dict`s, which would add the properties of State to
+    nested states, e.g., `is_end_state`. These properties
+    only have meaning when describing a `State` object.
+    """
+
+    def __init__(self, data):
+        super(StateData, self).__init__(data)
+
+        for key in self:
+            value = self[key]
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    if isinstance(item, dict):
+                        value[index] = StateData(item)
+
+            elif isinstance(value, dict):
+                self[key] = StateData(value)
+
+    def __getattr__(self, key):
+        return self[key]
+
+
+class State(dict):
     """
     Represents a state, including when the state should transition to
     another state.
 
     A state transitions when its current 'state' meets criteria for entering
-    a new 'state'. The criteria are defined in a `dict`, 'current,' and
-    'target'; each dict is defined by a 'key' and a 'value', so that a
-    a comparison can be made.
+    a new 'state'. The criteria are stored in `current` and `target`
+    attributes. Each of these values is characterized with a 'key' and a
+    'value', so that a a comparison can be made. When the state is
+    asynchronous, the `current` value is not used and instead the current
+    (system) time is used.
 
-    States transition by applying a function to the current state and checking
-    if the current state equals the target state. The function is provided
-    in the definition of the state. The function can be `increment`, which
+    States transition by applying an action to the current state and checking
+    if the current value equals the target value. The action is provided
+    in the definition of the state. The action can be `increment`, which
     increments a value, or `time`, which schedules when a state transition
     will occur.
 
-    A state that does not provide a function is determined to be the last or
+    A state that does not provide an action is determined to be the final or
     end state.
+
+    State subclasses `dict` and overrides the `__init__` method to provide
+    'dot' method accessors for the `dict`'s keys.
     """
 
     DATE_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
-    INCREMENT_FUNC = 'increment'
-    TIME_FUNC = 'time'
+    def __init__(self, data):
+        super(State, self).__init__(data)
 
-
-    def __init__(self, definition):
-        self._name = None
-        self._function = None
-        self._target_name = ''
-        self._current_state = {
-            'key': '',
-            'value': '',
-        }
-        self._target_state = {}
-        self._delegate = None
         self._did_enter_state = False
-        self._is_end_state = False
+        self._lock = threading.Lock()
+        self._transition_time = None
 
-        self._define(definition)
+        for key in self:
+            value = self[key]
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    if isinstance(item, dict):
+                        value[index] = State(item)
+
+            elif isinstance(value, dict):
+                self[key] = StateData(value)
+
+    def increment(self):
+        """
+        Increments the current state's value and attempts to transition
+        to the state's target state.
+        """
+        self.current.value += 1
+        return self.transition()
+
+    def time(self):
+        """
+        Used by an asynchronous state to transition to its target
+        state.
+        """
+        return self.transition()
 
     def to_dict(self):
+        """
+        Represents the State instance as a `dict`.
+
+        An asynchronous state does not have a `current` key and
+        a normal state does. We deal with each case separately
+        and avoid overriding `__getattr__` with exception handling.
+
+        Returns:
+            - A `dict` representing the latest state
+        """
         if self.is_end_state:
             return {
                 'name': self.name,
             }
 
-        target_value = self._target_value()
-        return {
+        value = {
             'name': self.name,
-            'func': self.function,
-            'current': {
-                'key': self.current_state['key'],
-                'value': self.current_state['value']
-            },
+            'func': self.action,
             'target': {
-                'name': self.target_name,
+                'name': self.target.name,
                 'when': {
-                    'key': self.target_state['key'],
-                    'value': target_value,
+                    'key': self.target.when.key,
+                    'value': self.target.when.value,
                 },
             },
         }
 
+        if not self.is_async:
+            value['current'] = {
+                'key': self.current.key,
+                'value': self.current.value,
+            }
+
+        return value
+
     def transition(self):
+        """
+        Transitions from the current state to the its target state.
+
+        Returns:
+            True if the transition was successful
+            False otherwise
+        """
         can_transition = self._can_transition()
         if can_transition:
             self._enter_state()
@@ -83,40 +156,28 @@ class State:
         return self._did_enter_state
 
     def update(self):
-        func = getattr(self, self.function)
-        func()
-        self.delegate.save()
+        """
+        Updates the state using the action defined by the user.
 
-    def time(self):
-        if not self.transition():
-            raise RuntimeError(f'Failed to update {self.name} state')
-
-    def increment(self):
-        self.current_state['value'] += 1
-        self.transition()
+        Returns:
+            True if the action was successful
+            False otherwise
+        """
+        func = getattr(self, self.action)
+        return func()
 
     @property
-    def did_enter_state(self):
-        return self._did_enter_state
-
-    @property
-    def function(self):
-        return self._function
-
-    @property
-    def is_end_state(self):
-        return self._is_end_state
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def current_state(self):
-        return self._current_state
+    def action(self):
+        """
+        Returns the action to perform when updating the state.
+        """
+        return self.func
 
     @property
     def delegate(self):
+        if self._delegate is None:
+            raise RuntimeError(f'State {self.name} has no delegate')
+
         return self._delegate
 
     @delegate.setter
@@ -124,78 +185,75 @@ class State:
         self._delegate = value
 
     @property
-    def target_name(self):
-        return self._target_name
+    def did_enter_state(self):
+        return self._did_enter_state
 
     @property
-    def target_state(self):
-        return self._target_state
+    def is_async(self):
+        return self.action == Action.TIME.value
 
-    def _can_transition(self):
+    @property
+    def is_end_state(self):
         """
-        For increment functions:
+        Returns if the state is the final or end state.
 
-            Returns if the value associated with the current state equals the
-            value associated with the target state.
-
-        For time functions:
-
-            Returns if the value associated with the current state is before
-            the value associated with the target state.
+        For end states, no action is defined, so calling it
+        will raise an error.
         """
-
-        if self.function == State.TIME_FUNC:
-            now = self._now()
-            target = self.target_state['value']
-            return target < now
-        elif self.function == State.INCREMENT_FUNC:
-            current_value = self.current_state['value']
-            target_value = self.target_state['value']
-            return current_value == target_value
+        try:
+            self.action
+        except KeyError:
+            return True
 
         return False
 
-    def _define(self, definition):
-        self._name = definition['name']
-        try:
-            self._function = definition['func']
-        except KeyError:
-            self._is_end_state = True
-            return
+    @property
+    def lock(self):
+        return self._lock
 
-        try:
-            current = definition['current']
-        except KeyError as e:
-            # current is defined as a default
-            pass
-        else:
-            self._define_now(current)
+    @property
+    def transition_time(self):
+        if self._transition_time is None:
+            self._transition_time = datetime.strptime(
+                self.target.when.value, State.DATE_FORMAT)
 
-        target = definition['target']
-        self._define_target(target)
+        return self._transition_time
 
-    def _define_now(self, value):
-        self._current_state = value
+    def _can_transition(self):
+        """
+        Decides if the state's current and target value meet the criterion
+        for transitioning to the state's target state.
 
-    def _define_target(self, value):
-        self._target_name = value['name']
-        self._target_state = value['when']
-        if self.function == State.TIME_FUNC:
-            self._target_state['value'] = datetime.strptime(
-                value['when']['value'], State.DATE_FORMAT
-            )
+        Returns:
+
+            For increment action, if the value associated with the
+            current state equals the value associated with the target state.
+
+            For time action, if the value associated with the current state
+            is before the value associated with the target state.
+        """
+
+        if self.action == Action.INCREMENT.value:
+            return self.current.value == self.target.when.value
+        elif self.action == Action.TIME.value:
+            now = self._now()
+            then = self.transition_time
+            return then < now
+
+        return False
 
     def _enter_state(self):
-        new_state_name = self.target_name
-        self._did_enter_state = self.delegate.did_enter_state(
-            self, new_state_name)
+        new_state_name = self.target.name
+
+        self.lock.acquire()
+        try:
+            self._did_enter_state = self.delegate.did_enter_state(
+                self, new_state_name)
+        finally:
+            self.lock.release()
 
     def _now(self):
         return datetime.now()
 
-    def _target_value(self):
-        value = self.target_state['value']
-        if self.function == State.TIME_FUNC:
-            return value.strftime(State.DATE_FORMAT)
-
-        return value
+    def __getattr__(self, key):
+        return self[key]

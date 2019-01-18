@@ -19,8 +19,3 @@ class StateDelegate(metaclass=abc.ABCMeta):
         System did transition from old state to
         new state.
         """
-    @abc.abstractmethod
-    def save(self):
-        """
-        Persist the current state.
-        """
