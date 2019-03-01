@@ -151,7 +151,7 @@ class StateMachine(StateDelegate):
             conf_files = []
             for f in os.listdir(self._config_path()):
                 name, ext = os.path.splitext(f)
-                if ext.lower() == 'json':
+                if ext.lower() == '.json':
                     conf_files.append(f)
 
             for conf_file in conf_files:

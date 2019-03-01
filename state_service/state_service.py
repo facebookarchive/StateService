@@ -159,7 +159,7 @@ class StateService(object):
     @property
     def logger(self):
         if self._logger is None:
-            self._logger = logging.getLogger(__name__)
+            self._logger = logging.getLogger(self.__class__.__name__)
 
         return self._logger
 
@@ -229,7 +229,7 @@ def main():
     try:
         app.run(debug=debug, host=host, port=port)
     except Exception:
-        app.machine.save()
+        state_service.machine.save()
         return 1
 
 
