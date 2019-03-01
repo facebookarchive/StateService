@@ -14,7 +14,9 @@ import argparse
 def argparse_fixture():
     return (
         argparse.Namespace(
-            machine='machine.yaml',
+            config='/var/opt/state_service/conf',
+            machine='/var/opt/state_service/machine.yaml',
+            models='/var/opt/state_service/models',
         ),
         []
     )
@@ -59,6 +61,36 @@ def async_state_fixture():
                 'key': 'clock',
                 'value': '3000-01-01T02:00:10',
             },
+        },
+    }
+
+
+def deserialize_model_fixture():
+    """
+    Returns a deserialized version of an instance of
+    the Model class. This simulates the idea that a
+    model instance would be serialized and loaded
+    from disk.
+    """
+    class Model:
+
+        def predict(self, values):
+            return [1]
+
+    return Model()
+
+
+def models_fixture():
+    return {
+        'fixture': {
+            'name': 'fixture',
+            'team': 'state_service',
+            'model': 'fixture.pkl',
+            'states': [
+                'walk',
+                'run',
+                'jump',
+            ],
         },
     }
 
@@ -116,3 +148,7 @@ def normal_state_fixture():
             },
         },
     }
+
+
+def predict_fixture():
+    return ['run']

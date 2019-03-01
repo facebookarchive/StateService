@@ -52,10 +52,10 @@ class Parser(object):
             self._parser = argparse.ArgumentParser(prog='state_service',
                                                    fromfile_prefix_chars='@',
                                                    )
-            self._parser.add_argument('--machine',
+            self._parser.add_argument('--config',
                                       type=str,
-                                      required=True,
-                                      help='the state machine for the tier',
+                                      required=False,
+                                      help='path to configuration directory',
                                       )
             self._parser.add_argument('--debug',
                                       action='store_true',
@@ -73,6 +73,16 @@ class Parser(object):
                                       required=False,
                                       default='logger.yaml',
                                       help='configuration file for logging',
+                                      )
+            self._parser.add_argument('--machine',
+                                      type=str,
+                                      required=False,
+                                      help='path to a state machine',
+                                      )
+            self._parser.add_argument('--models',
+                                      type=str,
+                                      required=False,
+                                      help='path to models directory',
                                       )
             self._parser.add_argument('--port',
                                       type=int,

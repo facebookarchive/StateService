@@ -13,8 +13,11 @@ from unittest import TestCase
 
 from datetime import datetime
 
-from .test_fixtures import normal_machine_fixture
+from .test_fixtures import argparse_fixture
 from .test_fixtures import async_machine_fixture
+from .test_fixtures import deserialize_model_fixture
+from .test_fixtures import models_fixture
+from .test_fixtures import normal_machine_fixture
 from ..state_service.state_machine import StateMachine
 
 
@@ -22,13 +25,16 @@ class TestStateMachine(TestCase):
 
     machine_module = 'state_service.state_service.state_machine.StateMachine'
     state_module = 'state_service.state_service.state.State'
+    patched_deserialize_func = f'{machine_module}._deserialize_model'
     patched_machine_func = f'{machine_module}._read_machine'
+    patched_models_func = f'{machine_module}.models'
     patched_now_func = f'{state_module}._now'
     patched_save_func = f'{machine_module}.save'
 
     @mock.patch(patched_save_func, return_value=True)
     def setUp(self, *patch):
-        self.machine = StateMachine('/tmp/machine.yml')
+        options = argparse_fixture()[0]
+        self.machine = StateMachine(options)
 
     def tearDown(self):
         self.machine = None
@@ -146,5 +152,47 @@ class TestStateMachine(TestCase):
         current_state = self.machine.current_state
         expected = 'state_2'
         actual = current_state.name
+
+        self.assertEqual(expected, actual)
+
+    @mock.patch(patched_machine_func, return_value=normal_machine_fixture())
+    def test_models_returns_models(self, *patch):
+        self.machine.build()
+
+        type(self.machine).models = mock.PropertyMock(
+            return_value=models_fixture()
+        )
+        models = self.machine.models
+        expected = 3
+        actual = models['fixture']
+
+        self.assertEqual(expected, len(actual['states']))
+
+    @mock.patch(patched_machine_func, return_value=normal_machine_fixture())
+    def test_predict_raises_an_error_when_model_is_missing(self, *patch):
+        self.machine.build()
+        type(self.machine).models = mock.PropertyMock(
+            return_value=models_fixture()
+        )
+
+        expected_model = \
+                '/var/opt/state_service/models/state_service/fixture.pkl'
+        expected = f'{expected_model} does not exist'
+        with self.assertRaises(FileNotFoundError) as error:
+            self.machine.predict('fixture', [100, 0])
+
+        self.assertEqual(expected, str(error.exception))
+
+    @mock.patch(patched_deserialize_func, return_value=deserialize_model_fixture())
+    @mock.patch(patched_machine_func, return_value=normal_machine_fixture())
+    def test_predict_returns_a_state(self, *patch):
+        self.machine.build()
+
+        type(self.machine).models = mock.PropertyMock(
+            return_value=models_fixture()
+        )
+
+        expected = ['run']
+        actual = self.machine.predict('fixture', [100, 0])
 
         self.assertEqual(expected, actual)

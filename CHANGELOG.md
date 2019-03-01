@@ -1,5 +1,11 @@
 ## Change Log
 
+### Version 2.0.0
+
+Introduced implicit state machines available from `POST /state`. This
+request receives data from machines and queries machine-learning models,
+returning a predicted state based on the data received.
+
 ### Version 1.1.0
 
 Replaced synchronous `time` function with an asynchronous version that

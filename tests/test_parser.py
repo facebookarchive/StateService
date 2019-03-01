@@ -26,6 +26,7 @@ class TestParser(TestCase):
             ['--machine', 'states.yaml',
              '--debug',
              '--host', 'www.facebook.com',
+             '--models', '/tmp/models',
              '--port', '22111',
              ]
         )
@@ -39,6 +40,10 @@ class TestParser(TestCase):
 
         expected = 'www.facebook.com'
         actual = options.host
+        self.assertEqual(expected, actual)
+
+        expected = '/tmp/models'
+        actual = options.models
         self.assertEqual(expected, actual)
 
         expected = 22111

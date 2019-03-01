@@ -8,8 +8,10 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import json
 import logging
 import sys
+
 from flask import Flask
 from flask import request
 from flask import Response
@@ -24,11 +26,13 @@ class StateService(object):
     Configures a Flask application using command-line arguments and includes
     response methods for each endpoint.
 
-    Each method acts on a state machine that is used to describe states, for
-    example, when one state transitions to another state.
+    GET and PUT methods act on a state machine that is used to describe states,
+    for example, when one state transitions to another state.
 
     GET /state?state=:state determines if a state, :state, is the current
     state.
+    POST /state determines the state that the requesting machine is in using
+    a previously trained ML model for prediction.
     PUT /state?state=:state updates the state, :state, and determines if it
     should transition to another state.
     """
@@ -39,6 +43,51 @@ class StateService(object):
         self._options = None
         self._parser = parser
 
+    def create_state(self):
+        """
+        Predicts the state that the requesting machine is in.
+
+        The request references the name of a model and values that the model
+        requires to make a prediction. The values are metrics reported by the
+        the requesting machines.
+
+        Returns:
+            A state that describes the requesting machine (with a 200 HTTP
+            response), or,
+            A 500 HTTP response if an error occurs in the prediction process
+        """
+
+        error_response = Response(
+            response=json.dumps({}),
+            mimetype='application/json',
+            status=500,
+        )
+        if not request.is_json:
+            self.logger.error(f'POST /state: Request must be JSON formatted')
+            return error_response
+
+        if 'name' not in request.json:
+            self.logger.error(f'POST /state: Missing name')
+            return error_response
+
+        if 'values' not in request.json:
+            self.logger.error(f'POST /state: Missing values')
+            return error_response
+
+        name, values = request.json.get('name'), request.json.get('values')
+
+        try:
+            state = self.machine.predict(name, values)
+            data = {'state': state}
+            return Response(
+                response=json.dumps(data),
+                mimetype='application/json',
+                status=200,
+            )
+        except RuntimeError as e:
+            self.logger.exception(f'POST /state: {str(e)}')
+            return error_response
+
     def get_state(self):
         """
         Determines whether the current state matches the state passed in as a
@@ -46,7 +95,7 @@ class StateService(object):
 
         Returns:
             A 200 HTTP response if :state is the current state,
-            A 406 HTTP response if :state is not the current state
+            A 406 HTTP response if :state is not the current state, or,
             A 500 HTTP response if :state is missing
         """
         state = request.args.get('state')
@@ -117,8 +166,15 @@ class StateService(object):
     @property
     def machine(self):
         if self._machine is None:
-            self._machine = StateMachine(self.options.machine)
-            self._machine.build()
+            self._machine = StateMachine(self.options)
+
+            #
+            # A state machine is optional, since StateService
+            # can operate only to serve queries of stored ML
+            # models from machines.
+            #
+            if self.options.machine:
+                self._machine.build()
 
         return self._machine
 
@@ -150,6 +206,11 @@ log.disabled = True
 @app.route('/state', methods=['OPTIONS', 'GET'])
 def get_state():
     return state_service.get_state()
+
+
+@app.route('/state', methods=['OPTIONS', 'POST'])
+def create_state():
+    return state_service.create_state()
 
 
 @app.route('/state', methods=['OPTIONS', 'PUT'])

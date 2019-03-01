@@ -1,12 +1,14 @@
 # StateService
 
-StateService is a state-machine-as-a-service that solves the problem of
-coordinating events that must occur in a sequence on one or more
-machines.
+StateService is a state machine-as-a-service that reports the state of one or more machines, so that machines can decide the next best step to ensure stability. StateService works with configuration management software to provide self-healing and automated recovery capabilities.
 
 ## Examples
 
-Describe a state machine using YAML.
+StateService can serve an explicit and/or implicit state machine.
+
+### Explicit State Machine
+
+StateService can read a state machine defined explicity in YAML.
 
 ```yaml
 --- states.yaml ---
@@ -35,7 +37,7 @@ states:
   - name: blue_state
 ```
 
-Run a local instance of StateService.
+To use, start an instance of StateService.
 
 ```sh
 > ./state_service --machine states.yaml &> /dev/null &
@@ -62,10 +64,46 @@ Use cURL to query and update the state machine defined by `states.yaml`.
 # Output is 200 OK
 ```
 
-StateService provides two ways to update its state machine. The first is
-as above: external HTTP requests cause updates. The second uses a state
-machine that contains states whose transitions are described using time;
-in this case, StateService updates its state machine automatically.
+StateService provides two ways to update its state machine. The first is as above: external HTTP requests cause updates. The second uses a state machine that contains states whose transitions are described using time; in this case, StateService updates its state machine automatically (see 'Asynchronous State Machines' below).
+
+### Implicit State Machine
+
+StateService hosts machine-learning models and responds to requests from `POST /state` to predict the state of the machine making the request.
+
+Start an instance of StateService.
+
+```sh
+> ./state_service --config /path/to/conf --models /path/to/models &> /dev/null &
+```
+
+where the path to configuration files contains the following JSON file
+
+```json
+{
+    "name": "colors",
+    "team": "state_service",
+    "model": "colors_v1.pkl",
+    "states": [
+        "green",
+        "red",
+        "blue"
+    ]
+}
+```
+
+Use cURL to query the implicit state machine. Given a JSON file, `models.json`,
+
+```json
+{
+    "name": "colors", // References the configuration file and finds the target model
+    "values": [[500, 0]] // Suitable values for the target model's `predict` method
+}
+```
+
+```sh
+> curl -X POST -d @models.json http://localhost:5000/state
+green
+```
 
 ## Requirements
 
@@ -91,10 +129,7 @@ Clone this git repository and use `pip` to install its dependencies.
 
 ## Building StateService
 
-We recommend using [xar](https://github.com/facebookincubator/xar) to
-build StateService. Although StateService's dependencies as wheels are not
-available (namely, 'itsdangerous' and 'python-click'), `xar` files will
-provide a single binary for deploying StateService.
+We recommend using [xar](https://github.com/facebookincubator/xar) to build StateService. Although StateService's dependencies as wheels are not available (namely, 'itsdangerous' and 'python-click'), `xar` files will provide a single binary for deploying StateService.
 
 Check [Python Wheels](https://www.pythonwheels.com) for updates.
 
@@ -110,18 +145,17 @@ to test StateService.
 
 ## How StateService works
 
-StateService is a Flask application that listens for GET and PUT
-requests and responds with HTTP status codes (200, 406, or 500). These
-status codes represent a YES/NO response when a machine queries the
-current state or wants to update the current state.
+StateService is a Flask application that can be configured as an explicit and/or implicit state machine.
+
+StateService, as an explicit state machine, listens for GET and PUT requests and responds with HTTP status codes (200, 406, or 500). These status codes represent a YES/NO response when a machine queries the current state or wants to update the current state.
+
+As an implicit state machine, StateService listens for POST requests and responds with a state value that is determined by a machine-learning model.
 
 ## Full documentation
 
-### Describing States
+### StateService and Explicit State Machines
 
-StateService reads a list of states from a YAML file and identifies an
-initial state for a machine (or machines). The state machine can be
-synchronous or asynchronous.
+StateService reads a list of states from a YAML file and identifies an initial state for a machine (or machines). The state machine can be synchronous or asynchronous.
 
 #### Synchronous State Machines
 
@@ -153,17 +187,11 @@ states:
   - name: blue_state
 ```
 
-In this example, the current state is `green_state`. `green_state` is
-defined fully with its name, a `func` attribute (`increment`), its
-current attributes (a key/value pair that describes a `count` key with a
-value of 0), and a target state to which it transitions when
-`green_state`'s `count` becomes 1. The `func` key describes a method on
-the `State` class (see `state.py`).
+In this example, the current state is `green_state`. `green_state` is defined fully with its name, a `func` attribute (`increment`), its current attributes (a key/value pair that describes a `count` key with a value of 0), and a target state to which it transitions when `green_state`'s `count` becomes 1. The `func` key describes a method on the `State` class (see `state.py`).
 
 #### Asynchronous State Machines
 
-To program an asynchronous state machine, describe a state machine as
-above, but assign the `func` key with a `time` value:
+To program an asynchronous state machine, describe a state machine as above, but assign the `func` key with a `time` value:
 
 ```yaml
 ...
@@ -178,35 +206,21 @@ states:
 ...
 ```
 
-describes `green_state` that will transition to `red_state` after midday
-on January 1, 3000. A `current` key is not necessary when the `time`
-function is used (it is implied that the current `clock` value is the
-current time on the machine that's running StateService).
+describes `green_state` that will transition to `red_state` after midday on January 1, 3000. A `current` key is not necessary when the `time` function is used (it is implied that the current `clock` value is the current time on the machine that's running StateService).
 
 ---
 
-Two `func` methods are defined: `increment` and `time`. In the case of
-`increment`, the method increments the current state's `key` by 1;
-`time` provides the state machine with the ability to transition states
-automatically depending on a specific time.
+Two `func` methods are defined: `increment` and `time`. In the case of `increment`, the method increments the current state's `key` by 1; `time` provides the state machine with the ability to transition states automatically depending on a specific time.
 
-The final state of a state machine is described only by its name (more
-precisely, it's identified by the absence of a `func` attribute).
+The final state of a state machine is described only by its name (more precisely, it's identified by the absence of a `func` attribute).
 
-### StateService
+#### Integrating StateService with Configuration Management Software
 
-StateService provides a state-machine-as-a-service. StateService reads a
-linear state machine (described using YAML, as above) and records the
-current state as one or more machines query and update its state machine.
+StateService provides a state-machine-as-a-service. StateService reads a linear state machine (described using YAML, as above) and records the current state as one or more machines query and update its state machine.
 
-After each update, StateService persists its state, so failures in the
-service do not result in inconsistent state (by default, file storage is
-used).
+After each update, StateService persists its state, so failures in the service do not result in inconsistent state (by default, file storage is used).
 
-StateService uses HTTP to integrate with software automation tools like
-Chef to coordinate state across several machines. For example, if one
-machine requires its group to be in a certain state before performing an
-action, it can query StateService from a Chef resource:
+StateService uses HTTP to integrate with software automation tools like Chef to coordinate state across several machines. For example, if one machine requires its group to be in a certain state before performing an action, it can query StateService from a Chef resource:
 
 ```rb
 # Assuming a synchronous state machine
@@ -218,13 +232,7 @@ execute 'change_machine' do
 end
 ```
 
-`canChangeMachine.curl` describes a GET request from StateService, e.g.,
-`https://state_service/state?state=canChangeMachineState`. If this
-request returns 200, the Chef resource will proceed to execute the
-command; otherwise, this resource will not execute. After executing the
-command, `didChangeMachine.curl` is used to update StateService using a
-PUT request, e.g.,
-`https://state_service/state?state=canChangeMachineState`.
+`canChangeMachine.curl` describes a GET request from StateService, e.g., `https://state_service/state?state=canChangeMachineState`. If this request returns 200, the Chef resource will proceed to execute the command; otherwise, this resource will not execute. After executing the command, `didChangeMachine.curl` is used to update StateService using a PUT request, e.g., `https://state_service/state?state=canChangeMachineState`.
 
 When the `func` value is `time`, the Chef resource is defined as:
 
@@ -238,14 +246,37 @@ execute 'change_machine' do
 end
 ```
 
-where `canChangeMachine.curl` describes a GET request to StateService.
-This is consistent with the intention that, when state transitions are
-scheduled at a certain time, we only need to request the current state.
+where `canChangeMachine.curl` describes a GET request to StateService. This is consistent with the intention that, when state transitions are scheduled at a certain time, we only need to request the current state.
+
+### StateService and Implicit State Machines
+
+To use StateService as an implicit state machine, create JSON files that describe the models available to StateService.
+
+```json
+{
+    "name": "colors",
+    "team": "state_service",
+    "model": "colors_v1.pkl",
+    "states": [
+        "green",
+        "red",
+        "blue"
+    ]
+}
+```
+
+The above JSON file provides a `name` that will be provided in a `POST /state` request to identify the model, a `team` that is used to identify the subdirectory to search for the `model`, a serialized version of a ML model instance, and a list of `states`. The ML model instance must provide a `predict` method of the form:
+
+```py
+def predict(self, values):
+    ...
+```
+
+This method must return a single-element `list` containing an integer that references one of the states in the JSON file above.
 
 ## Contributing
 
-See the CONTRIBUTING file for how to help out and read our Code of
-Conduct (CODE\_OF\_CONDUCT.md).
+See the CONTRIBUTING file for how to help out and read our Code of Conduct (CODE\_OF\_CONDUCT.md).
 
 ## License
 
