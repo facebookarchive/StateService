@@ -35,6 +35,7 @@ class TestStateMachine(TestCase):
     def setUp(self, *patch):
         options = argparse_fixture()[0]
         self.machine = StateMachine(options)
+        self.machine.__machine_path = None
 
     def tearDown(self):
         self.machine = None
@@ -44,17 +45,8 @@ class TestStateMachine(TestCase):
             self.machine.build()
 
     @mock.patch(patched_machine_func, return_value=normal_machine_fixture())
-    def test_state_machine_does_not_call_save_unless_update(self, *patch):
+    def test_state_machine_calls_save_without_transition(self, *patch):
         self.machine.build()
-
-        with mock.patch(TestStateMachine.patched_save_func) as mock_save:
-            self.machine.update()
-            mock_save.assert_not_called()
-
-    @mock.patch(patched_machine_func, return_value=normal_machine_fixture())
-    def test_state_machine_calls_save_if_update(self, *patch):
-        self.machine.build()
-        self.machine.update()
 
         with mock.patch(TestStateMachine.patched_save_func) as mock_save:
             self.machine.update()

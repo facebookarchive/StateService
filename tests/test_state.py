@@ -122,8 +122,7 @@ class TestState(TestCase):
         self.set_up_normal_state_fixture()
 
         self.state.current.value = self.state.target.when.value
-        actual = self.state.transition()
-        self.assertTrue(actual)
+        self.state.transition()
 
         actual = self.state.did_enter_state
         self.assertTrue(actual)
@@ -226,8 +225,7 @@ class TestState(TestCase):
     def test_transition_returns_true_if_async_state_can_transition(self, *patch):
         self.set_up_async_state_fixture()
 
-        actual = self.state.transition()
-        self.assertTrue(actual)
+        self.state.transition()
 
         actual = self.state.did_enter_state
         self.assertTrue(actual)

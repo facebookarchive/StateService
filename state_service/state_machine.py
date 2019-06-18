@@ -10,6 +10,7 @@
 
 import os
 import json
+import logging
 import pickle
 import threading
 import yaml
@@ -48,6 +49,7 @@ class StateMachine(StateDelegate):
     def __init__(self, options):
         self._current_state = None
         self._current_state_name = None
+        self._logger = None
         self._machine = None
         self._models = None
         self._options = options
@@ -117,15 +119,11 @@ class StateMachine(StateDelegate):
               transitioned to its target state
             - False otherwise
         """
-        if self.current_state.update():
-            self.save()
+        self.current_state.update()
+        self.save()
 
-            if not self.did_end and self.is_async:
-                self._start_timer()
-
-            return True
-
-        return False
+        if not self.did_end and self.is_async:
+            self._start_timer()
 
     @property
     def current_state(self):
@@ -138,6 +136,13 @@ class StateMachine(StateDelegate):
     @property
     def is_async(self):
         return self.current_state.is_async
+
+    @property
+    def logger(self):
+        if self._logger is None:
+            self._logger = logging.getLogger(self.__class__.__name__)
+
+        return self._logger
 
     @property
     def machine(self):

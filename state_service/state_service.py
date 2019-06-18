@@ -145,13 +145,13 @@ class StateService(object):
             return Response('', status=500)
 
         if self.machine.is_current_state(state):
-            if self.machine.update():
-                self.machine.save()
-                self.logger.info(f'PUT /state: Updated {state} state')
-                return Response(f'{state}', status=200)
-            else:
-                self.logger.error(f'PUT /state: Unable to update {state} state')
-                return Response('', status=500)
+            self.machine.update()
+            self.machine.save()
+            self.logger.info(f'PUT /state: Updated {state} state')
+            return Response(f'{state}', status=200)
+        else:
+            self.logger.error(f'PUT /state: Unable to update {state} state')
+            return Response('', status=500)
 
         self.logger.info(f'PUT /state: {state} is not current state')
         return Response('', status=406)

@@ -8,6 +8,7 @@
 # LICENSE file in the root directory of this source tree.
 #
 
+import logging
 import threading
 
 from datetime import datetime
@@ -78,6 +79,7 @@ class State(dict):
 
         self._did_enter_state = False
         self._lock = threading.Lock()
+        self._logger = None
         self._transition_time = None
 
         for key in self:
@@ -96,14 +98,14 @@ class State(dict):
         to the state's target state.
         """
         self.current.value += 1
-        return self.transition()
+        self.transition()
 
     def time(self):
         """
         Used by an asynchronous state to transition to its target
         state.
         """
-        return self.transition()
+        self.transition()
 
     def to_dict(self):
         """
@@ -153,8 +155,6 @@ class State(dict):
         if can_transition:
             self._enter_state()
 
-        return self._did_enter_state
-
     def update(self):
         """
         Updates the state using the action defined by the user.
@@ -164,7 +164,7 @@ class State(dict):
             False otherwise
         """
         func = getattr(self, self.action)
-        return func()
+        func()
 
     @property
     def action(self):
@@ -210,6 +210,13 @@ class State(dict):
     @property
     def lock(self):
         return self._lock
+
+    @property
+    def logger(self):
+        if self._logger is None:
+            self._logger = logging.getLogger(self.__class__.__name__)
+
+        return self._logger
 
     @property
     def transition_time(self):
