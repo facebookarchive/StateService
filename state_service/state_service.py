@@ -43,6 +43,8 @@ class StateService(object):
         self._options = None
         self._parser = parser
 
+        self._initialize_machine()
+
     def create_state(self):
         """
         Predicts the state that the requesting machine is in.
@@ -165,17 +167,6 @@ class StateService(object):
 
     @property
     def machine(self):
-        if self._machine is None:
-            self._machine = StateMachine(self.options)
-
-            #
-            # A state machine is optional, since StateService
-            # can operate only to serve queries of stored ML
-            # models from machines.
-            #
-            if self.options.machine:
-                self._machine.build()
-
         return self._machine
 
     @property
@@ -190,6 +181,18 @@ class StateService(object):
             self._options = self._parser.options
 
         return self._options
+
+    def _initialize_machine(self):
+        self._machine = StateMachine(self.options)
+
+        #
+        # A state machine is optional, since StateService
+        # can operate only to serve queries of stored ML
+        # models from machines.
+        #
+        if self.options.machine:
+            self._machine.build()
+
 
 
 """
