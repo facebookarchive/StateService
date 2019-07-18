@@ -43,8 +43,6 @@ class StateService(object):
         self._options = None
         self._parser = parser
 
-        self._initialize_machine()
-
     def create_state(self):
         """
         Predicts the state that the requesting machine is in.
@@ -167,6 +165,9 @@ class StateService(object):
 
     @property
     def machine(self):
+        if self._machine is None:
+            self._machine = StateMachine(self.options)
+
         return self._machine
 
     @property
@@ -182,17 +183,15 @@ class StateService(object):
 
         return self._options
 
-    def _initialize_machine(self):
-        self._machine = StateMachine(self.options)
+    def _initialize(self):
+        """
+        Initializes the state machine to be served.
 
-        #
-        # A state machine is optional, since StateService
-        # can operate only to serve queries of stored ML
-        # models from machines.
-        #
+        A state machine is optional, since StateService can operate
+        exclusively to serve queries of stored ML models from machines.
+        """
         if self.options.machine:
-            self._machine.build()
-
+            self.machine.build()
 
 
 """
@@ -230,7 +229,10 @@ def main():
     configure_logger(path=logger_path)
 
     try:
-        app.run(debug=debug, host=host, port=port)
+        state_service._initialize()
+        app.run(
+            debug=debug, host=host, port=port, threaded=False,
+        )
     except Exception:
         state_service.machine.save()
         return 1

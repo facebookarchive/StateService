@@ -34,7 +34,7 @@ class TestStateService(TestCase):
     patched_save_func = f'{machine_module}.save'
     patched_write_machine_func = f'{machine_module}._write_machine'
 
-    def setUp(self):
+    def setUp(self, *patch):
         app.testing = True
         self.app = app.test_client()
 
@@ -45,6 +45,8 @@ class TestStateService(TestCase):
     @mock.patch(patched_parser_func, return_value=argparse_fixture())
     @mock.patch(patched_read_machine_func, return_value=normal_machine_fixture())
     def test_get_normal_state_tests_current_state(self, *patch):
+        state_service._initialize()
+
         expected = 200
         actual = self.app.get('/state?state=state_1')
 
@@ -57,6 +59,8 @@ class TestStateService(TestCase):
     @mock.patch(patched_read_machine_func, return_value=normal_machine_fixture())
     @mock.patch(patched_write_machine_func, return_value=None)
     def test_put_normal_state_updates_current_state(self, *patch):
+        state_service._initialize()
+
         expected = 200
         actual = self.app.get('/state?state=state_1')
 
@@ -92,6 +96,8 @@ class TestStateService(TestCase):
     @mock.patch(patched_parser_func, return_value=argparse_fixture())
     @mock.patch(patched_read_machine_func, return_value=async_machine_fixture())
     def test_get_async_state_tests_current_state(self, *patch):
+        state_service._initialize()
+
         expected = 200
         actual = self.app.get('/state?state=state_1')
 
@@ -106,6 +112,8 @@ class TestStateService(TestCase):
     @mock.patch(patched_save_func, return_value=True)
     @mock.patch(patched_write_machine_func, return_value=None)
     def test_put_async_state_returns_406(self, *patch):
+        state_service._initialize()
+
         expected = 200
         actual = self.app.get('/state?state=state_1')
 

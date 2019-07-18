@@ -252,12 +252,9 @@ class State(dict):
     def _enter_state(self):
         new_state_name = self.target.name
 
-        self.lock.acquire()
-        try:
+        with self.lock:
             self._did_enter_state = self.delegate.did_enter_state(
                 self, new_state_name)
-        finally:
-            self.lock.release()
 
     def _now(self):
         return datetime.now()

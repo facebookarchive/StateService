@@ -49,6 +49,7 @@ class StateMachine(StateDelegate):
     def __init__(self, options):
         self._current_state = None
         self._current_state_name = None
+        self._lock = threading.Lock()
         self._logger = None
         self._machine = None
         self._models = None
@@ -104,7 +105,8 @@ class StateMachine(StateDelegate):
             'states': states_as_dict,
         }
 
-        self._write_machine(data)
+        with self.lock:
+            self._write_machine(data)
 
     def update(self):
         """
@@ -136,6 +138,10 @@ class StateMachine(StateDelegate):
     @property
     def is_async(self):
         return self.current_state.is_async
+
+    @property
+    def lock(self):
+        return self._lock
 
     @property
     def logger(self):
